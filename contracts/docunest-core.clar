@@ -49,7 +49,8 @@
     owner: principal,
     created-at: uint,
     updated-at: uint,
-    size: uint
+    size: uint,
+    latest-version: uint ;; Track the latest version number
   }
 )
 
@@ -234,7 +235,8 @@
         owner: caller,
         created-at: current-time,
         updated-at: current-time,
-        size: size
+        size: size,
+        latest-version: u1
       }
     )
     
@@ -246,7 +248,7 @@
         storage-location: storage-location,
         updated-at: current-time,
         updated-by: caller,
-        change-notes: (some "Initial version")
+        change-notes: (some u"Initial version")
       }
     )
     
@@ -344,35 +346,32 @@
   (let (
     (caller tx-sender)
     (current-time block-height)
-    (document-info (map-get? documents { document-id: document-id }))
+    (document-info (unwrap! (map-get? documents { document-id: document-id }) ERR-DOCUMENT-NOT-FOUND))
   )
-    ;; Verify document exists
-    (asserts! (is-some document-info) ERR-DOCUMENT-NOT-FOUND)
+    ;; Verify document exists handled by unwrap!
     
     ;; Check permissions
     (asserts! (or 
-                (is-eq (get owner (unwrap-panic document-info)) caller)
+                (is-eq (get owner document-info) caller)
                 (has-document-permission document-id caller PERMISSION-EDIT)
               ) 
               ERR-NOT-AUTHORIZED)
     
-    ;; Calculate new version number
-    (let ((unwrapped-doc (unwrap-panic document-info))
-          (new-version (+ u1 (default-to u0 
-            (fold + (map-get? document-versions 
-                      { document-id: document-id, version: (get updated-at unwrapped-doc) }))))))
+    ;; Calculate new version number by incrementing latest
+    (let ((new-version (+ u1 (get latest-version document-info))))
       
       ;; Update main document entry
       (map-set documents
         { document-id: document-id }
-        (merge unwrapped-doc
+        (merge document-info
           {
             title: title,
             description: description,
             storage-location: storage-location,
             content-hash: content-hash,
             updated-at: current-time,
-            size: size
+            size: size,
+            latest-version: new-version ;; Update latest-version
           }
         )
       )
